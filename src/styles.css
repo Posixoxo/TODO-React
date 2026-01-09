@@ -314,10 +314,14 @@ ul, .todo-list {
 
 .filter{
   cursor: pointer;
+  transition: color 0.3s ease;
+  color: var(--text-muted); 
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.filters .active{
-  color: hsl(220, 98%, 61%);
+.filter.active {
+  color: hsl(220, 98%, 61%) !important; 
 }
 
 .Instruction{
@@ -338,23 +342,29 @@ ul, .todo-list {
   display: none;
 }
 
+/* ONLY apply hover color on Desktop/Devices with a mouse */
+@media (hover: hover) {
+  .filter:hover {
+    color: var(--text-hover);
+  }
+}
 
 @media (min-width: 1024px){
 
-  .mobile-version{
-    display: none;
-  }
+.mobile-version{
+  display: none;
+}
 
-  .desktop-version{
-    display: block;
-  }
+.desktop-version{
+  display: block;
+}
 
-  header {
-    background-image: var(--header-desktop);
-  }
+header {
+  background-image: var(--header-desktop);
+}
 
-  .navbar{
-    margin: -60px 230px 50px 230px;
+.navbar{
+  margin: -60px 230px 50px 230px;
 }
 
 .Create{
