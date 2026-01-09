@@ -1,6 +1,5 @@
 Todo App with Drag-and-Drop
 
-(https://www.frontendmentor.io/challenges/todo-app-Su1_tWLnK). 
 This project is a highly interactive, responsive task management application with persistent data and theme switching.
 
 ## 🚀 Features
