@@ -1,0 +1,380 @@
+body{
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: "Josefin Sans", sans-serif;
+}
+
+:root {
+/* ========= DARK THEME (DEFAULT) ========= */
+--bg-main: hsl(235, 21%, 11%);
+--bg-card: hsl(235, 24%, 19%);
+--text-primary: hsl(234, 39%, 85%);
+--text-hover: hsl(236, 33%, 92%);
+--text-muted: hsl(236, 9%, 61%);
+--border-muted: hsl(237, 14%, 26%);
+--accent: hsl(235, 16%, 43%);
+
+/* Header images */
+--header-mobile: url('/images/bg-mobile-dark.jpg');
+  --header-desktop: url('/images/bg-desktop-dark.jpg');
+}
+
+/* ========= LIGHT THEME ========= */
+body.light-theme {
+--bg-main: hsl(233, 11%, 84%);
+--bg-card: hsl(0, 0%, 98%);
+--text-primary: hsl(235, 19%, 35%);
+--text-hover: hsl(235, 21%, 11%);
+--text-muted: hsl(236, 9%, 61%);
+--border-muted: hsl(233, 11%, 84%);
+--accent: hsl(234, 39%, 85%);
+
+/* Header images */
+--header-mobile: url('/images/bg-mobile-light.jpg');
+  --header-desktop: url('/images/bg-desktop-light.jpg');
+}
+
+
+header{
+  background-image: var(--header-mobile);
+  background-size: cover;
+  max-width: 100%;
+  color: white;
+  padding: 100px 0;
+}
+
+.navbar{
+  display: flex;
+  justify-content: space-between;
+  margin: -60px 30px 50px 30px;
+}
+
+.navbar h1{
+  font-weight: 700;
+  letter-spacing: 5px;
+}
+
+.theme-toggle {
+position: relative;
+width: 30px;
+height: 30px;
+margin: auto 0;
+cursor: pointer;
+}
+
+.theme-toggle img {
+position: absolute;
+inset: 0;
+width: 30px;
+height: 30px;
+transition:
+  opacity 0.4s ease,
+  transform 0.4s ease;
+}
+
+.sun {
+opacity: 1;
+transform: scale(1);
+}
+
+.moon {
+opacity: 0;
+transform: scale(0.5);
+pointer-events: none;
+}
+
+body.light-theme .sun {
+opacity: 0;
+transform: scale(0.5);
+pointer-events: none;
+}
+
+body.light-theme .moon {
+opacity: 1;
+transform: scale(1);
+pointer-events: auto;
+}
+
+body,
+header,
+.todo-list,
+.input,
+.filters {
+transition:
+  background-color 0.5s ease,
+  color 0.5s ease,
+  background-image 0.5s ease;
+}
+
+
+.Create{
+  position: relative;
+  margin: -140px 30px 0 30px;
+}
+
+.rounded{
+  position: absolute;
+  border: 1px solid hsl(237, 14%, 26%);
+  border-radius: 50%;
+  left: 25px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 25px;
+  height: 25px;
+  pointer-events: none; /* Allows clicking through the icon to the input */
+}
+
+.input{
+  width: 100%;
+  border: 1px solid transparent;
+  height: 70px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: 2px;
+  padding-left: 65px; /* Space for icon + gap */
+  padding-right: 15px;
+  font-size: 16px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.input::placeholder{
+  color: hsl(0, 0%, 60%);
+}
+
+.input:hover{
+  border: 1px solid var(--text-muted);
+  transition: border 0.8s ease-in-out;
+}
+
+.input:focus{
+  outline: none;
+  border: 2px solid var(--accent);
+}
+
+.input:disabled{
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.todo-list{
+  display: flex;
+  gap: 15px;
+  flex-direction: column;
+  margin: 30px;
+  padding: 10px 0;
+  height: 100%;
+  list-style-type: none;
+  background-color: var(--bg-card);
+  border: none;
+}
+
+/* Remove the duplicate list styles that might clash with Framer */
+ul, .todo-list {
+  list-style: none;
+  padding: 0;
+}
+
+.todo-container {
+  position: relative;
+  padding: 20px 25px; 
+  margin: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  cursor: grab;
+  background-color: var(--bg-card); 
+  overflow: visible; /* Allows the 'pop' scale to show outside the bounds */
+  z-index: 1;
+  user-select: none; /* Prevents text selection while dragging */
+  touch-action: none; /* Crucial for mobile drag and drop */
+}
+
+.todo-container:active {
+  cursor: grabbing;
+}
+
+.todo-container:hover .delete-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.todo-container:hover {
+  z-index: 10; /* Ensures the 'popped' item stays on top of others */
+}
+
+.line{
+  border: 0.1px solid hsl(237, 14%, 26%);
+  width: 100%;
+}
+
+.todo-text{
+  font-size: 15px;
+  flex-grow: 1;
+  word-break: break-word;
+}
+
+.rounded2 {
+  position: relative;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  border: 1px solid var(--border-muted);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* gradient border layer */
+.rounded2::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  padding: 1px; 
+
+  background: linear-gradient(
+    hsl(280, 87%, 65%),
+    hsl(192, 100%, 67%)
+  );
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* hover = REPLACE border */
+.rounded2:hover {
+  border-color: transparent;
+}
+
+.rounded2:hover::after {
+  opacity: 1;
+}
+
+.delete-btn{
+  display: block;
+  width: 18px;
+  height: 18px;
+  max-width: 100%;
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  cursor: pointer;
+}
+
+.analytics{
+  display: flex;
+  justify-content: space-between;
+  margin: 0 25px;
+}
+
+.items-left{
+  color: var(--text-muted);
+}
+
+.clear-completed{
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.clear-completed:hover{
+  color: var(--text-hover);
+}
+
+.filters{
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+  background-color: var(--bg-card);
+  margin: 0 30px;
+  padding: 15px 0;
+  border-radius: 5px;
+  justify-content: center;
+}
+
+.filters p{
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.filters p:hover{
+  color: var(--text-hover);
+}
+
+.filter{
+  cursor: pointer;
+}
+
+.filters .active{
+  color: hsl(220, 98%, 61%);
+}
+
+.Instruction{
+  text-align: center;
+  margin: 40px 30px 60px 30px;
+}
+
+.Instruction p{
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.mobile-version{
+  display: block;
+}
+
+.desktop-version{
+  display: none;
+}
+
+
+@media (min-width: 1024px){
+
+  .mobile-version{
+    display: none;
+  }
+
+  .desktop-version{
+    display: block;
+  }
+
+  header {
+    background-image: var(--header-desktop);
+  }
+
+  .navbar{
+    margin: -60px 230px 50px 230px;
+}
+
+.Create{
+  margin: -140px 230px 0 230px;
+}
+
+.todo-list{
+  margin: 30px 230px;
+}
+
+.analytics{
+  align-items: center;
+}
+
+.Instruction p{
+  font-size: 30px;
+}
+
+
+}
+
+
+
