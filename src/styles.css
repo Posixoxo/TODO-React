@@ -142,6 +142,7 @@ transition:
 
 .input::placeholder{
   color: hsl(0, 0%, 60%);
+  font-family: "Josefin Sans", sans-serif;
 }
 
 .input:hover{
