@@ -335,6 +335,133 @@ ul, .todo-list {
   color: var(--text-muted);
 }
 
+/* MOdal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.timer-modal {
+  background: var(--bg-card);
+  width: 100%;
+  max-width: 350px;
+  padding: 30px;
+  border-radius: 15px;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  margin: 0 20px;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.clock-icon {
+  font-size: 48px;
+  margin: 15px 0;
+  display: block;
+  font-size: 56px;
+  margin: 10px auto;
+  width: fit-content;
+}
+
+.custom-time-input {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.custom-time-input input {
+  width: 80px;
+  height: 60px;
+  font-size: 32px;
+  text-align: center;
+  border-radius: 12px;
+  border: 2px solid var(--border-muted);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-weight: 700;
+  outline: none;
+}
+
+/* Highlights the input when user clicks */
+.custom-time-input input:focus {
+  border-color: hsl(220, 98%, 61%);
+}
+
+.custom-time-input span {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+/* Hide the spin buttons (up/down arrows) for a cleaner look */
+.custom-time-input input::-webkit-outer-spin-button,
+.custom-time-input input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.modal-desc {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 25px;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.timer-options {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.timer-options button {
+  flex: 1;
+  padding: 12px 5px;
+  border: none;
+  border-radius: 5px;
+  background: hsl(220, 98%, 61%);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.timer-options button:hover {
+  opacity: 0.8;
+}
+
+.skip-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+
+
 .mobile-version{
   display: block;
 }
