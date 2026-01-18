@@ -27,8 +27,7 @@ function App() {
           await OneSignal.init({ 
             appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
             allowLocalhostAsSecureOrigin: true,
-            // Use absolute path for Vercel stability
-            serviceWorkerPath: "/OneSignalSDK.sw.js", 
+            serviceWorkerPath: "OneSignalSDK.sw.js", // Matches the file in public
           });
           console.log("OneSignal Initialized");
         }
@@ -65,22 +64,20 @@ function App() {
 
       console.log("Checking subscription...");
 
-      // SAFE CHECK: Use optional chaining (?.) so it doesn't crash if the SDK isn't ready
+      // Attempt to get the ID
       const subscriptionId = OneSignal.User?.pushSubscription?.id;
-      const permission = await OneSignal.Notifications?.permission;
 
-      // If we don't have an ID yet, it means they need to click 'Allow' or the SW is still loading
       if (!subscriptionId) {
         console.log("Subscription not ready. Triggering prompt...");
+        // Close modal first so the user can see the browser prompt clearly
+        setShowTimerModal(false);
         
-        // This opens the browser popup
         await OneSignal.Notifications.requestPermission();
-        
-        alert("Please click 'Allow' on the browser prompt, then click 'Set Reminder' again.");
+        alert("Please click 'Allow' on the browser prompt to enable reminders.");
         return; 
       }
 
-      // If we have the ID, send to the OneSignal API
+      // If we have the ID, send to API
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -90,8 +87,8 @@ function App() {
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
-          contents: { "en": `Reminder: ${todo.text}` },
-          headings: { "en": "Todo App ⏰" },
+          contents: { "en": `Task: ${todo.text}` },
+          headings: { "en": "Todo Reminder! ⏰" },
           send_after: sendAfter.toISOString(), 
         })
       });
@@ -104,18 +101,19 @@ function App() {
       }
 
     } catch (err) {
-      console.error("Function crashed, but we will close modal anyway:", err);
+      console.error("Reminder Error:", err);
+    } finally {
+      // ALWAYS cleanup and close the modal
+      setShowTimerModal(false);
+      setPendingTodoId(null);
+      setCustomMin("");
+      
+      // Fallback local sound
+      setTimeout(() => {
+        const audio = new Audio('/sounds/notification.mp3');
+        audio.play().catch(() => {});
+      }, mins * 60000);
     }
-    
-    // ALWAYS close the modal and play the backup sound, even if the API call failed
-    setTimeout(() => {
-      const audio = new Audio('/sounds/notification.mp3');
-      audio.play().catch(() => {});
-    }, mins * 60000);
-
-    setShowTimerModal(false);
-    setPendingTodoId(null);
-    setCustomMin("");
   };
 
   const filtered = todos.filter(t => {
