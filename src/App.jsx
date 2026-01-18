@@ -16,7 +16,6 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
-  // 1. OneSignal Initialization
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
@@ -28,9 +27,10 @@ function App() {
           await OneSignal.init({ 
             appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
             allowLocalhostAsSecureOrigin: true,
-            serviceWorkerPath: "OneSignalSDK.sw.js", 
+            // Use absolute path for Vercel stability
+            serviceWorkerPath: "/OneSignalSDK.sw.js", 
           });
-          console.log("OneSignal Initialized Successfully");
+          console.log("OneSignal Initialized");
         }
       } catch (e) {
         console.error("OneSignal Init Error:", e);
@@ -54,7 +54,6 @@ function App() {
     }
   };
 
-  // 2. The Gesture-Fixed Schedule Function
   const scheduleReminder = async (minutes) => {
     const mins = parseInt(minutes);
     if (isNaN(mins) || mins <= 0) return;
@@ -64,25 +63,24 @@ function App() {
       const sendAfter = new Date();
       sendAfter.setMinutes(sendAfter.getMinutes() + mins);
 
-      console.log("Checking subscription status...");
+      console.log("Checking subscription...");
 
-      // GESTURE FIX: Check permission and subscription ID
-      const permission = await OneSignal.Notifications.permission;
-      const subscriptionId = OneSignal.User.pushSubscription.id;
+      // SAFE CHECK: Use optional chaining (?.) so it doesn't crash if the SDK isn't ready
+      const subscriptionId = OneSignal.User?.pushSubscription?.id;
+      const permission = await OneSignal.Notifications?.permission;
 
-      // If user hasn't allowed notifications, trigger the prompt using this button click
-      if (!subscriptionId || !permission) {
-        console.log("Requesting permission via gesture...");
+      // If we don't have an ID yet, it means they need to click 'Allow' or the SW is still loading
+      if (!subscriptionId) {
+        console.log("Subscription not ready. Triggering prompt...");
+        
+        // This opens the browser popup
         await OneSignal.Notifications.requestPermission();
         
-        // Explain to user they need to click the browser 'Allow' button
-        alert("Please click 'Allow' on the browser prompt that appeared, then click 'Set Reminder' again.");
+        alert("Please click 'Allow' on the browser prompt, then click 'Set Reminder' again.");
         return; 
       }
 
-      console.log("Scheduling notification for ID:", subscriptionId);
-
-      // API Call to OneSignal
+      // If we have the ID, send to the OneSignal API
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -92,33 +90,32 @@ function App() {
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
-          contents: { "en": `Time to: ${todo.text}` },
-          headings: { "en": "Todo Reminder! ⏰" },
+          contents: { "en": `Reminder: ${todo.text}` },
+          headings: { "en": "Todo App ⏰" },
           send_after: sendAfter.toISOString(), 
         })
       });
 
-      const result = await response.json();
-
       if (response.ok) {
-        console.log("Successfully scheduled on OneSignal server");
-        setShowTimerModal(false);
-        setPendingTodoId(null);
-        setCustomMin("");
+        console.log("Notification Scheduled!");
       } else {
-        console.error("OneSignal API Error:", result);
-        alert("Error: " + (result.errors?.[0] || "Scheduling failed"));
+        const errData = await response.json();
+        console.error("OneSignal API Error:", errData);
       }
 
     } catch (err) {
-      console.error("CRITICAL ERROR:", err);
+      console.error("Function crashed, but we will close modal anyway:", err);
     }
     
-    // Local Audio Fallback (Foreground only)
+    // ALWAYS close the modal and play the backup sound, even if the API call failed
     setTimeout(() => {
       const audio = new Audio('/sounds/notification.mp3');
       audio.play().catch(() => {});
     }, mins * 60000);
+
+    setShowTimerModal(false);
+    setPendingTodoId(null);
+    setCustomMin("");
   };
 
   const filtered = todos.filter(t => {
