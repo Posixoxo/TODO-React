@@ -16,6 +16,7 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
+  // 1. REINFORCED ONESIGNAL INITIALIZATION
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
@@ -27,9 +28,12 @@ function App() {
           await OneSignal.init({ 
             appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
             allowLocalhostAsSecureOrigin: true,
-            serviceWorkerPath: "OneSignalSDK.sw.js", // Matches the file in public
+            // Pointing to the primary worker file
+            serviceWorkerPath: "OneSignalSDKWorker.js", 
+            // This force-registers the worker at the root to fix "postMessage" errors
+            serviceWorkerParam: { scope: "/" } 
           });
-          console.log("OneSignal Initialized");
+          console.log("OneSignal Initialized Successfully");
         }
       } catch (e) {
         console.error("OneSignal Init Error:", e);
@@ -53,6 +57,7 @@ function App() {
     }
   };
 
+  // 2. RESILIENT SCHEDULE REMINDER
   const scheduleReminder = async (minutes) => {
     const mins = parseInt(minutes);
     if (isNaN(mins) || mins <= 0) return;
@@ -64,20 +69,21 @@ function App() {
 
       console.log("Checking subscription...");
 
-      // Attempt to get the ID
+      // Use optional chaining to prevent crashes
       const subscriptionId = OneSignal.User?.pushSubscription?.id;
 
       if (!subscriptionId) {
-        console.log("Subscription not ready. Triggering prompt...");
-        // Close modal first so the user can see the browser prompt clearly
+        console.log("Subscription not ready. Requesting permission...");
+        // Close modal first so browser prompt is visible
         setShowTimerModal(false);
         
         await OneSignal.Notifications.requestPermission();
-        alert("Please click 'Allow' on the browser prompt to enable reminders.");
+        alert("Please click 'Allow' on the browser prompt, then click 'Set Reminder' again.");
         return; 
       }
 
-      // If we have the ID, send to API
+      console.log("Scheduling notification for ID:", subscriptionId);
+
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -101,14 +107,15 @@ function App() {
       }
 
     } catch (err) {
-      console.error("Reminder Error:", err);
+      console.error("Reminder process crashed:", err);
     } finally {
-      // ALWAYS cleanup and close the modal
+      // 3. FORCE MODAL CLOSURE
+      // This runs no matter what, fixing the "stuck modal" issue
       setShowTimerModal(false);
       setPendingTodoId(null);
       setCustomMin("");
       
-      // Fallback local sound
+      // Local Sound Backup
       setTimeout(() => {
         const audio = new Audio('/sounds/notification.mp3');
         audio.play().catch(() => {});
