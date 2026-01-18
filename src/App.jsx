@@ -16,15 +16,14 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
-  // 1. Initialize OneSignal using Environment Variables
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
     }
 
-    // This uses the key from your .env file
+    // Use Vite environment variable
     OneSignal.init({ 
-      appId: process.env.REACT_APP_ONESIGNAL_APP_ID, 
+      appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
       allowLocalhostAsSecureOrigin: true 
     }).then(() => {
       console.log("OneSignal Initialized");
@@ -45,63 +44,84 @@ function App() {
     }
   };
 
-  // --- THE SECURE ONESIGNAL SCHEDULE FUNCTION ---
-  const scheduleReminder = async (minutes) => {
-    const mins = parseInt(minutes);
-    if (isNaN(mins) || mins <= 0) return;
+    const scheduleReminder = async (minutes) => {
+      const mins = parseInt(minutes);
+      
+      try {
+        if (isNaN(mins) || mins <= 0) return;
 
-    const todo = todos.find(t => t.id === pendingTodoId);
-    
-    // Create the timestamp for when the notification should fire
-    const sendAfter = new Date();
-    sendAfter.setMinutes(sendAfter.getMinutes() + mins);
+        const todo = todos.find(t => t.id === pendingTodoId);
+        const sendAfter = new Date();
+        sendAfter.setMinutes(sendAfter.getMinutes() + mins);
 
-    // 1. Ensure user is subscribed
-    const isSubscribed = await OneSignal.isPushNotificationsEnabled();
-    if (!isSubscribed) {
-      await OneSignal.showNativePrompt();
-    }
+        console.log("Attempting to schedule...");
 
-    // 2. Get the unique User ID for this device
-    const userId = await OneSignal.getUserId();
+        // SAFETY CHECK: Ensure OneSignal is actually initialized
+        if (!OneSignal.User || !OneSignal.User.pushSubscription) {
+          console.error("OneSignal User or PushSubscription is not defined.");
+          
+          // Try to prompt them again
+          try {
+            await OneSignal.Slidedown.promptPush();
+          } catch (e) {
+            console.error("Prompt failed", e);
+          }
+          
+          alert("Notification system not ready. Please refresh or allow permissions.");
+          return;
+        }
 
-    // 3. Post to OneSignal API using secure keys
-    try {
-      const response = await fetch("https://onesignal.com/api/v1/notifications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Basic ${process.env.REACT_APP_ONESIGNAL_REST_API_KEY}`
-        },
-        body: JSON.stringify({
-          app_id: process.env.REACT_APP_ONESIGNAL_APP_ID,
-          include_player_ids: [userId], 
-          contents: { "en": `Task: ${todo.text}` },
-          headings: { "en": "Todo Reminder! ⏰" },
-          send_after: sendAfter.toISOString(), 
-          chrome_web_icon: "/logo192.png",
-          ios_badgeType: "Increase",
-          ios_badgeCount: 1
-        })
-      });
+        // Get Subscription ID
+        const userId = OneSignal.User.pushSubscription.id;
+        
+        if (!userId) {
+          alert("Subscription ID not found. Please click 'Allow' on the notification prompt.");
+          return;
+        }
 
-      if (response.ok) {
-        console.log(`Notification scheduled for ${sendAfter.toLocaleTimeString()}`);
+        // API Call
+        const response = await fetch("https://onesignal.com/api/v1/notifications", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Basic ${import.meta.env.VITE_ONESIGNAL_REST_API_KEY}`
+          },
+          body: JSON.stringify({
+            app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
+            include_subscription_ids: [userId], 
+            contents: { "en": `Task: ${todo.text}` },
+            headings: { "en": "Todo Reminder! ⏰" },
+            send_after: sendAfter.toISOString(), 
+          })
+        });
+
+        const result = await response.json();
+        console.log("OneSignal Response:", result);
+
+        if (response.ok) {
+          setShowTimerModal(false);
+          setPendingTodoId(null);
+          setCustomMin("");
+        } else {
+          alert("OneSignal Error: " + (result.errors?.[0] || "Unknown error"));
+        }
+
+      } catch (err) {
+        console.error("CRITICAL ERROR:", err);
+        alert("Check console for error details");
       }
-    } catch (err) {
-      console.error("OneSignal scheduling failed:", err);
-    }
+      
+      // Local Audio Fallback
+      setTimeout(() => {
+        const audio = new Audio('/sounds/notification.mp3');
+        audio.play().catch(() => console.log("Foreground audio blocked"));
+      }, mins * 60000);
 
-    // 4. Local Audio Fallback (Only plays if tab is open)
-    setTimeout(() => {
-      const audio = new Audio('/sounds/notification.mp3');
-      audio.play().catch(() => console.log("Foreground audio blocked"));
-    }, mins * 60000);
+      setShowTimerModal(false);
+      setPendingTodoId(null);
+      setCustomMin("");
+    };
 
-    setShowTimerModal(false);
-    setPendingTodoId(null);
-    setCustomMin("");
-  };
 
   const filtered = todos.filter(t => {
     if (filter === "Active") return !t.completed;
