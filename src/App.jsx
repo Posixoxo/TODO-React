@@ -16,18 +16,30 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
+  // 1. IMPROVED INITIALIZATION
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
     }
 
-    // Use Vite environment variable
-    OneSignal.init({ 
-      appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
-      allowLocalhostAsSecureOrigin: true 
-    }).then(() => {
-      console.log("OneSignal Initialized");
-    });
+    const initOneSignal = async () => {
+      try {
+        // Prevent double-initialization crash
+        if (!OneSignal.initialized) {
+          await OneSignal.init({ 
+            appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
+            allowLocalhostAsSecureOrigin: true,
+            // Explicitly point to the file we created to fix the 404
+            serviceWorkerPath: "OneSignalSDK.sw.js", 
+          });
+          console.log("OneSignal Initialized Successfully");
+        }
+      } catch (e) {
+        console.error("OneSignal Init Error:", e);
+      }
+    };
+
+    initOneSignal();
   }, []);
 
   useEffect(() => {
@@ -44,84 +56,83 @@ function App() {
     }
   };
 
-    const scheduleReminder = async (minutes) => {
-      const mins = parseInt(minutes);
-      
-      try {
-        if (isNaN(mins) || mins <= 0) return;
+  const scheduleReminder = async (minutes) => {
+    const mins = parseInt(minutes);
+    
+    try {
+      if (isNaN(mins) || mins <= 0) return;
 
-        const todo = todos.find(t => t.id === pendingTodoId);
-        const sendAfter = new Date();
-        sendAfter.setMinutes(sendAfter.getMinutes() + mins);
+      const todo = todos.find(t => t.id === pendingTodoId);
+      const sendAfter = new Date();
+      sendAfter.setMinutes(sendAfter.getMinutes() + mins);
 
-        console.log("Attempting to schedule...");
+      console.log("Attempting to schedule...");
 
-        // SAFETY CHECK: Ensure OneSignal is actually initialized
-        if (!OneSignal.User || !OneSignal.User.pushSubscription) {
-          console.error("OneSignal User or PushSubscription is not defined.");
-          
-          // Try to prompt them again
-          try {
-            await OneSignal.Slidedown.promptPush();
-          } catch (e) {
-            console.error("Prompt failed", e);
-          }
-          
-          alert("Notification system not ready. Please refresh or allow permissions.");
-          return;
-        }
-
-        // Get Subscription ID
-        const userId = OneSignal.User.pushSubscription.id;
+      // SAFETY CHECK: Ensure OneSignal is actually initialized
+      if (!OneSignal.User || !OneSignal.User.pushSubscription) {
+        console.error("OneSignal User or PushSubscription is not defined.");
         
-        if (!userId) {
-          alert("Subscription ID not found. Please click 'Allow' on the notification prompt.");
-          return;
+        try {
+          // Force the prompt if they aren't subscribed
+          await OneSignal.Slidedown.promptPush();
+        } catch (e) {
+          console.error("Prompt failed", e);
         }
-
-        // API Call
-        const response = await fetch("https://onesignal.com/api/v1/notifications", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Basic ${import.meta.env.VITE_ONESIGNAL_REST_API_KEY}`
-          },
-          body: JSON.stringify({
-            app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
-            include_subscription_ids: [userId], 
-            contents: { "en": `Task: ${todo.text}` },
-            headings: { "en": "Todo Reminder! ⏰" },
-            send_after: sendAfter.toISOString(), 
-          })
-        });
-
-        const result = await response.json();
-        console.log("OneSignal Response:", result);
-
-        if (response.ok) {
-          setShowTimerModal(false);
-          setPendingTodoId(null);
-          setCustomMin("");
-        } else {
-          alert("OneSignal Error: " + (result.errors?.[0] || "Unknown error"));
-        }
-
-      } catch (err) {
-        console.error("CRITICAL ERROR:", err);
-        alert("Check console for error details");
+        
+        alert("Notification system not ready. Please allow permissions in the popup and try again.");
+        return;
       }
+
+      // Get Subscription ID
+      const userId = OneSignal.User.pushSubscription.id;
       
-      // Local Audio Fallback
-      setTimeout(() => {
-        const audio = new Audio('/sounds/notification.mp3');
-        audio.play().catch(() => console.log("Foreground audio blocked"));
-      }, mins * 60000);
+      if (!userId) {
+        alert("Subscription ID not found. Please click 'Allow' on the notification prompt.");
+        return;
+      }
 
-      setShowTimerModal(false);
-      setPendingTodoId(null);
-      setCustomMin("");
-    };
+      // API Call using Vite Env Variables
+      const response = await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${import.meta.env.VITE_ONESIGNAL_REST_API_KEY}`
+        },
+        body: JSON.stringify({
+          app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
+          include_subscription_ids: [userId], 
+          contents: { "en": `Task: ${todo.text}` },
+          headings: { "en": "Todo Reminder! ⏰" },
+          send_after: sendAfter.toISOString(), 
+        })
+      });
 
+      const result = await response.json();
+      console.log("OneSignal Response:", result);
+
+      if (response.ok) {
+        setShowTimerModal(false);
+        setPendingTodoId(null);
+        setCustomMin("");
+      } else {
+        alert("OneSignal Error: " + (result.errors?.[0] || "Unknown error"));
+      }
+
+    } catch (err) {
+      console.error("CRITICAL ERROR:", err);
+      alert("Check console for error details");
+    }
+    
+    // Local Audio Fallback
+    setTimeout(() => {
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.play().catch(() => console.log("Foreground audio blocked"));
+    }, mins * 60000);
+
+    setShowTimerModal(false);
+    setPendingTodoId(null);
+    setCustomMin("");
+  };
 
   const filtered = todos.filter(t => {
     if (filter === "Active") return !t.completed;
