@@ -16,7 +16,7 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
-  // 1. IMPROVED INITIALIZATION
+  // 1. OneSignal Initialization
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
@@ -24,12 +24,10 @@ function App() {
 
     const initOneSignal = async () => {
       try {
-        // Prevent double-initialization crash
         if (!OneSignal.initialized) {
           await OneSignal.init({ 
             appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
             allowLocalhostAsSecureOrigin: true,
-            // Explicitly point to the file we created to fix the 404
             serviceWorkerPath: "OneSignalSDK.sw.js", 
           });
           console.log("OneSignal Initialized Successfully");
@@ -56,42 +54,35 @@ function App() {
     }
   };
 
+  // 2. The Gesture-Fixed Schedule Function
   const scheduleReminder = async (minutes) => {
     const mins = parseInt(minutes);
-    
-    try {
-      if (isNaN(mins) || mins <= 0) return;
+    if (isNaN(mins) || mins <= 0) return;
 
+    try {
       const todo = todos.find(t => t.id === pendingTodoId);
       const sendAfter = new Date();
       sendAfter.setMinutes(sendAfter.getMinutes() + mins);
 
-      console.log("Attempting to schedule...");
+      console.log("Checking subscription status...");
 
-      // SAFETY CHECK: Ensure OneSignal is actually initialized
-      if (!OneSignal.User || !OneSignal.User.pushSubscription) {
-        console.error("OneSignal User or PushSubscription is not defined.");
+      // GESTURE FIX: Check permission and subscription ID
+      const permission = await OneSignal.Notifications.permission;
+      const subscriptionId = OneSignal.User.pushSubscription.id;
+
+      // If user hasn't allowed notifications, trigger the prompt using this button click
+      if (!subscriptionId || !permission) {
+        console.log("Requesting permission via gesture...");
+        await OneSignal.Notifications.requestPermission();
         
-        try {
-          // Force the prompt if they aren't subscribed
-          await OneSignal.Slidedown.promptPush();
-        } catch (e) {
-          console.error("Prompt failed", e);
-        }
-        
-        alert("Notification system not ready. Please allow permissions in the popup and try again.");
-        return;
+        // Explain to user they need to click the browser 'Allow' button
+        alert("Please click 'Allow' on the browser prompt that appeared, then click 'Set Reminder' again.");
+        return; 
       }
 
-      // Get Subscription ID
-      const userId = OneSignal.User.pushSubscription.id;
-      
-      if (!userId) {
-        alert("Subscription ID not found. Please click 'Allow' on the notification prompt.");
-        return;
-      }
+      console.log("Scheduling notification for ID:", subscriptionId);
 
-      // API Call using Vite Env Variables
+      // API Call to OneSignal
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -100,38 +91,34 @@ function App() {
         },
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
-          include_subscription_ids: [userId], 
-          contents: { "en": `Task: ${todo.text}` },
+          include_subscription_ids: [subscriptionId], 
+          contents: { "en": `Time to: ${todo.text}` },
           headings: { "en": "Todo Reminder! ⏰" },
           send_after: sendAfter.toISOString(), 
         })
       });
 
       const result = await response.json();
-      console.log("OneSignal Response:", result);
 
       if (response.ok) {
+        console.log("Successfully scheduled on OneSignal server");
         setShowTimerModal(false);
         setPendingTodoId(null);
         setCustomMin("");
       } else {
-        alert("OneSignal Error: " + (result.errors?.[0] || "Unknown error"));
+        console.error("OneSignal API Error:", result);
+        alert("Error: " + (result.errors?.[0] || "Scheduling failed"));
       }
 
     } catch (err) {
       console.error("CRITICAL ERROR:", err);
-      alert("Check console for error details");
     }
     
-    // Local Audio Fallback
+    // Local Audio Fallback (Foreground only)
     setTimeout(() => {
       const audio = new Audio('/sounds/notification.mp3');
-      audio.play().catch(() => console.log("Foreground audio blocked"));
+      audio.play().catch(() => {});
     }, mins * 60000);
-
-    setShowTimerModal(false);
-    setPendingTodoId(null);
-    setCustomMin("");
   };
 
   const filtered = todos.filter(t => {
