@@ -16,7 +16,6 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
-  // 1. REINFORCED ONESIGNAL INITIALIZATION
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
@@ -28,9 +27,7 @@ function App() {
           await OneSignal.init({ 
             appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
             allowLocalhostAsSecureOrigin: true,
-            // Pointing to the primary worker file
-            serviceWorkerPath: "OneSignalSDKWorker.js", 
-            // This force-registers the worker at the root to fix "postMessage" errors
+            serviceWorkerPath: "OneSignalSDKWorker.js",
             serviceWorkerParam: { scope: "/" } 
           });
           console.log("OneSignal Initialized Successfully");
@@ -57,33 +54,28 @@ function App() {
     }
   };
 
-  // 2. RESILIENT SCHEDULE REMINDER
   const scheduleReminder = async (minutes) => {
     const mins = parseInt(minutes);
     if (isNaN(mins) || mins <= 0) return;
 
     try {
       const todo = todos.find(t => t.id === pendingTodoId);
-      const sendAfter = new Date();
-      sendAfter.setMinutes(sendAfter.getMinutes() + mins);
+      
+      // Ensure time is calculated correctly
+      const sendAfter = new Date(Date.now() + mins * 60000);
+      
+      console.log("Scheduling for:", sendAfter.toLocaleTimeString());
 
-      console.log("Checking subscription...");
-
-      // Use optional chaining to prevent crashes
       const subscriptionId = OneSignal.User?.pushSubscription?.id;
 
       if (!subscriptionId) {
-        console.log("Subscription not ready. Requesting permission...");
-        // Close modal first so browser prompt is visible
         setShowTimerModal(false);
-        
         await OneSignal.Notifications.requestPermission();
-        alert("Please click 'Allow' on the browser prompt, then click 'Set Reminder' again.");
+        alert("Please Allow notifications, then try again.");
         return; 
       }
 
-      console.log("Scheduling notification for ID:", subscriptionId);
-
+      // API Call
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -93,29 +85,24 @@ function App() {
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
-          contents: { "en": `Task: ${todo.text}` },
-          headings: { "en": "Todo Reminder! ⏰" },
+          contents: { "en": `⏰ Time to: ${todo.text}` },
+          headings: { "en": "Todo Reminder" },
           send_after: sendAfter.toISOString(), 
         })
       });
 
       if (response.ok) {
-        console.log("Notification Scheduled!");
-      } else {
-        const errData = await response.json();
-        console.error("OneSignal API Error:", errData);
+        console.log("Push scheduled successfully");
       }
 
     } catch (err) {
-      console.error("Reminder process crashed:", err);
+      console.error("Reminder Error:", err);
     } finally {
-      // 3. FORCE MODAL CLOSURE
-      // This runs no matter what, fixing the "stuck modal" issue
       setShowTimerModal(false);
       setPendingTodoId(null);
       setCustomMin("");
       
-      // Local Sound Backup
+      // THIS ONLY WORKS IF TAB IS OPEN
       setTimeout(() => {
         const audio = new Audio('/sounds/notification.mp3');
         audio.play().catch(() => {});
@@ -148,6 +135,8 @@ function App() {
         <div className="Create">
           <div className="rounded"></div>
           <input 
+            id="todo-input"
+            name="todo-text"
             className="input" 
             placeholder="Create a new todo..." 
             value={inputValue} 
@@ -178,16 +167,12 @@ function App() {
               exit={{ scale: 0.8, opacity: 0 }}
             >
               <p className="modal-title">Remind me in...</p>
-              <motion.div 
-                className="clock-icon" 
-                animate={{ rotate: 360 }} 
-                transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-              >
-                ⏰
-              </motion.div>
+              <motion.div className="clock-icon" animate={{ rotate: 360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }}>⏰</motion.div>
               <div className="custom-time-input">
                 <input 
                   type="number" 
+                  id="minutes-input"
+                  name="minutes"
                   placeholder="0" 
                   value={customMin} 
                   onChange={(e) => setCustomMin(e.target.value)} 
@@ -195,13 +180,9 @@ function App() {
                 <span>mins</span>
               </div>
               <div className="timer-options">
-                <button onClick={() => scheduleReminder(customMin || 5)}>
-                  Set Reminder
-                </button>
+                <button onClick={() => scheduleReminder(customMin || 5)}>Set Reminder</button>
               </div>
-              <button className="skip-btn" onClick={() => setShowTimerModal(false)}>
-                Skip
-              </button>
+              <button className="skip-btn" onClick={() => setShowTimerModal(false)}>Skip</button>
             </motion.div>
           </div>
         )}
