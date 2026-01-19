@@ -27,7 +27,9 @@ function App() {
           await OneSignal.init({ 
             appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
             allowLocalhostAsSecureOrigin: true,
-            serviceWorkerPath: "OneSignalSDKWorker.js",
+            // 1. ADD LEADING SLASH (Vercel Requirement)
+            serviceWorkerPath: "/OneSignalSDKWorker.js", 
+            // 2. FORCE SCOPE
             serviceWorkerParam: { scope: "/" } 
           });
           console.log("OneSignal Initialized Successfully");
@@ -60,22 +62,21 @@ function App() {
 
     try {
       const todo = todos.find(t => t.id === pendingTodoId);
+      // Ensure we are sending at least 10 seconds into the future
+      const sendAfter = new Date(Date.now() + mins * 60000 + 5000);
       
-      // Ensure time is calculated correctly
-      const sendAfter = new Date(Date.now() + mins * 60000);
-      
-      console.log("Scheduling for:", sendAfter.toLocaleTimeString());
+      console.log("Scheduling push for:", sendAfter.toISOString());
 
       const subscriptionId = OneSignal.User?.pushSubscription?.id;
 
       if (!subscriptionId) {
         setShowTimerModal(false);
         await OneSignal.Notifications.requestPermission();
-        alert("Please Allow notifications, then try again.");
+        alert("Permission needed. Please click 'Allow' and set the reminder again.");
         return; 
       }
 
-      // API Call
+      // 3. API CALL LOGGING
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -85,14 +86,19 @@ function App() {
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
-          contents: { "en": `⏰ Time to: ${todo.text}` },
-          headings: { "en": "Todo Reminder" },
+          contents: { "en": `⏰ REMINDER: ${todo.text}` },
+          headings: { "en": "Todo App" },
           send_after: sendAfter.toISOString(), 
         })
       });
 
+      const result = await response.json();
+      console.log("OneSignal API Result:", result);
+
       if (response.ok) {
-        console.log("Push scheduled successfully");
+        alert("Background notification scheduled! You can close the tab now.");
+      } else {
+        alert("API Error: " + (result.errors?.[0] || "Check Console"));
       }
 
     } catch (err) {
@@ -102,7 +108,7 @@ function App() {
       setPendingTodoId(null);
       setCustomMin("");
       
-      // THIS ONLY WORKS IF TAB IS OPEN
+      // Local Sound (Tab must be open for this)
       setTimeout(() => {
         const audio = new Audio('/sounds/notification.mp3');
         audio.play().catch(() => {});
@@ -160,23 +166,10 @@ function App() {
       <AnimatePresence>
         {showTimerModal && (
           <div className="modal-overlay">
-            <motion.div 
-              className="timer-modal" 
-              initial={{ scale: 0.8, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.8, opacity: 0 }}
-            >
+            <motion.div className="timer-modal" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}>
               <p className="modal-title">Remind me in...</p>
-              <motion.div className="clock-icon" animate={{ rotate: 360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }}>⏰</motion.div>
               <div className="custom-time-input">
-                <input 
-                  type="number" 
-                  id="minutes-input"
-                  name="minutes"
-                  placeholder="0" 
-                  value={customMin} 
-                  onChange={(e) => setCustomMin(e.target.value)} 
-                />
+                <input type="number" id="min-input" name="min" placeholder="0" value={customMin} onChange={(e) => setCustomMin(e.target.value)} />
                 <span>mins</span>
               </div>
               <div className="timer-options">
