@@ -15,8 +15,9 @@ function App() {
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
+  const [isPushReady, setIsPushReady] = useState(false);
 
-  // 1. FORCED ONESIGNAL INITIALIZATION
+  // 1. STRENGTHENED INITIALIZATION
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
@@ -24,18 +25,21 @@ function App() {
 
     const initOneSignal = async () => {
       try {
-        if (!OneSignal.initialized) {
-          await OneSignal.init({ 
-            appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
-            allowLocalhostAsSecureOrigin: true,
-            // Using absolute path and forcing root scope to fix the 'postMessage' error
-            serviceWorkerPath: "/OneSignalSDKWorker.js", 
-            serviceWorkerParam: { scope: "/" } 
-          });
-          console.log("OneSignal Bridge Established");
+        await OneSignal.init({ 
+          appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
+          allowLocalhostAsSecureOrigin: true,
+          serviceWorkerPath: "OneSignalSDKWorker.js",
+          serviceWorkerParam: { scope: "/" } 
+        });
+        
+        // Check if we are already subscribed
+        if (OneSignal.User?.pushSubscription?.id) {
+          setIsPushReady(true);
         }
+        
+        console.log("OneSignal Bridge Initialized");
       } catch (e) {
-        console.error("OneSignal Bridge Error:", e);
+        console.error("OneSignal Init Error:", e);
       }
     };
 
@@ -56,32 +60,36 @@ function App() {
     }
   };
 
-  // 2. RELIABLE BACKGROUND SCHEDULING
+  // 2. RE-DESIGNED SCHEDULING LOGIC
   const scheduleReminder = async (minutes) => {
     const mins = parseInt(minutes);
     if (isNaN(mins) || mins <= 0) return;
 
     try {
       const todo = todos.find(t => t.id === pendingTodoId);
+      // Buffering the time by 15 seconds to prevent "Time in the past" API errors
+      const sendAfter = new Date(Date.now() + (mins * 60000) + 15000);
       
-      // Calculate exact time: Now + minutes + 10-second safety buffer
-      const sendAfter = new Date(Date.now() + mins * 60000 + 10000);
-      
-      console.log("Local Time Now:", new Date().toString());
-      console.log("Scheduling Push for (UTC):", sendAfter.toISOString());
+      console.log("Attempting to schedule for:", sendAfter.toISOString());
 
-      const subscriptionId = OneSignal.User?.pushSubscription?.id;
+      // Attempt to get the Subscription ID
+      let subscriptionId = OneSignal.User?.pushSubscription?.id;
 
-      // If subscription bridge is broken, prompt immediately
+      // If missing, try one forced permission request
       if (!subscriptionId) {
-        console.warn("No Subscription ID found. Prompting user...");
-        setShowTimerModal(false);
+        console.log("No ID found. Requesting Permission...");
         await OneSignal.Notifications.requestPermission();
-        alert("Notifications weren't ready. Please 'Allow' permissions and try setting the reminder again.");
-        return; 
+        
+        // Check again after prompt
+        subscriptionId = OneSignal.User?.pushSubscription?.id;
+        
+        if (!subscriptionId) {
+          alert("Could not connect to notification service. Please refresh the page and ensure notifications are 'Allowed' in your browser settings.");
+          return;
+        }
       }
 
-      // API Call to OneSignal REST API
+      // API CALL
       const response = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -91,8 +99,8 @@ function App() {
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
-          contents: { "en": `⏰ REMINDER: ${todo.text}` },
-          headings: { "en": "Todo App" },
+          contents: { "en": `⏰ Task: ${todo.text}` },
+          headings: { "en": "Todo Reminder" },
           send_after: sendAfter.toISOString(), 
         })
       });
@@ -100,22 +108,22 @@ function App() {
       const result = await response.json();
       
       if (response.ok) {
-        console.log("Success! OneSignal ID:", result.id);
-        alert(`Notification scheduled for ${mins} min(s). You can close this tab.`);
+        console.log("Push Queued Successfully:", result.id);
+        // Modal closes automatically in 'finally' block
       } else {
         console.error("OneSignal API Error:", result);
-        alert("API Error: " + (result.errors?.[0] || "Unknown Error"));
+        alert("Failed to schedule: " + (result.errors?.[0] || "Check Console"));
       }
 
     } catch (err) {
-      console.error("Critical Function Error:", err);
+      console.error("Critical Reminder Error:", err);
     } finally {
-      // 3. CLEANUP: Always close modal and reset state
+      // 3. GUARANTEED CLEANUP
       setShowTimerModal(false);
       setPendingTodoId(null);
       setCustomMin("");
-      
-      // Local Foreground Sound Fallback
+
+      // Foreground Sound Fallback (Only works if tab stays open)
       setTimeout(() => {
         const audio = new Audio('/sounds/notification.mp3');
         audio.play().catch(() => {});
@@ -180,11 +188,17 @@ function App() {
               exit={{ scale: 0.8, opacity: 0 }}
             >
               <p className="modal-title">Remind me in...</p>
-              <motion.div className="clock-icon" animate={{ rotate: 360 }} transition={{ duration: 15, repeat: Infinity, ease: "linear" }}>⏰</motion.div>
+              <motion.div 
+                className="clock-icon" 
+                animate={{ rotate: 360 }} 
+                transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+              >
+                ⏰
+              </motion.div>
               <div className="custom-time-input">
                 <input 
-                  id="mins-input"
-                  name="mins-input"
+                  id="mins-field"
+                  name="mins-field"
                   type="number" 
                   placeholder="0" 
                   value={customMin} 
