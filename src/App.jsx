@@ -15,9 +15,7 @@ function App() {
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
-  const [isPushReady, setIsPushReady] = useState(false);
 
-  // 1. STRENGTHENED INITIALIZATION
   useEffect(() => {
     if (localStorage.getItem("theme") === "light") {
       document.body.classList.add("light-theme");
@@ -25,24 +23,20 @@ function App() {
 
     const initOneSignal = async () => {
       try {
+        if ('serviceWorker' in navigator) {
+          await navigator.serviceWorker.register('/OneSignalSDKWorker.js');
+        }
         await OneSignal.init({ 
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
           allowLocalhostAsSecureOrigin: true,
-          serviceWorkerPath: "OneSignalSDKWorker.js",
-          serviceWorkerParam: { scope: "/" } 
+          serviceWorkerPath: "OneSignalSDKWorker.js"
         });
-        
-        // Check if we are already subscribed
-        if (OneSignal.User?.pushSubscription?.id) {
-          setIsPushReady(true);
-        }
-        
-        console.log("OneSignal Bridge Initialized");
       } catch (e) {
-        console.error("OneSignal Init Error:", e);
+        if (!e.message?.includes("already initialized")) {
+          console.error("OneSignal Error:", e);
+        }
       }
     };
-
     initOneSignal();
   }, []);
 
@@ -60,37 +54,48 @@ function App() {
     }
   };
 
-  // 2. RE-DESIGNED SCHEDULING LOGIC
+  // --- OPTIMIZED SCHEDULE REMINDER ---
   const scheduleReminder = async (minutes) => {
+    // 1. IMMEDIATE UI CLEANUP
     const mins = parseInt(minutes);
-    if (isNaN(mins) || mins <= 0) return;
+    setShowTimerModal(false);
+    setCustomMin("");
+
+    if (isNaN(mins) || mins <= 0) {
+      setPendingTodoId(null);
+      return;
+    }
+
+    console.log("Scheduling request for:", mins, "mins");
+    const todo = todos.find(t => t.id === pendingTodoId);
+    const todoText = todo?.text || "Todo Reminder";
 
     try {
-      const todo = todos.find(t => t.id === pendingTodoId);
-      // Buffering the time by 15 seconds to prevent "Time in the past" API errors
-      const sendAfter = new Date(Date.now() + (mins * 60000) + 15000);
-      
-      console.log("Attempting to schedule for:", sendAfter.toISOString());
-
-      // Attempt to get the Subscription ID
-      let subscriptionId = OneSignal.User?.pushSubscription?.id;
-
-      // If missing, try one forced permission request
-      if (!subscriptionId) {
-        console.log("No ID found. Requesting Permission...");
-        await OneSignal.Notifications.requestPermission();
-        
-        // Check again after prompt
+      // 2. CHECK FOR ONESIGNAL (Handle Localhost Failures)
+      let subscriptionId = null;
+      try {
         subscriptionId = OneSignal.User?.pushSubscription?.id;
-        
-        if (!subscriptionId) {
-          alert("Could not connect to notification service. Please refresh the page and ensure notifications are 'Allowed' in your browser settings.");
-          return;
-        }
+      } catch (e) {
+        console.warn("OneSignal SDK checking failed.");
       }
 
-      // API CALL
-      const response = await fetch("https://onesignal.com/api/v1/notifications", {
+      if (!subscriptionId) {
+        console.warn("OneSignal not active (Localhost/Blocked). Fallback alert set.");
+        
+        // Browser Alert Fallback
+        setTimeout(() => {
+          alert(`⏰ Reminder: ${todoText}`);
+        }, mins * 60000);
+
+        // Request permission in background (no 'await' so it doesn't freeze)
+        OneSignal.Notifications?.requestPermission().catch(() => {});
+        setPendingTodoId(null);
+        return; 
+      }
+
+      // 3. PRODUCTION API CALL (Only on Vercel)
+      const sendAfter = new Date(Date.now() + (mins * 60000) + 15000);
+      await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -99,35 +104,19 @@ function App() {
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
-          contents: { "en": `⏰ Task: ${todo.text}` },
-          headings: { "en": "Todo Reminder" },
+          contents: { "en": `⏰ Task: ${todoText}` },
+          headings: { "en": "Todo App" },
           send_after: sendAfter.toISOString(), 
         })
       });
 
-      const result = await response.json();
-      
-      if (response.ok) {
-        console.log("Push Queued Successfully:", result.id);
-        // Modal closes automatically in 'finally' block
-      } else {
-        console.error("OneSignal API Error:", result);
-        alert("Failed to schedule: " + (result.errors?.[0] || "Check Console"));
-      }
-
     } catch (err) {
-      console.error("Critical Reminder Error:", err);
-    } finally {
-      // 3. GUARANTEED CLEANUP
-      setShowTimerModal(false);
-      setPendingTodoId(null);
-      setCustomMin("");
-
-      // Foreground Sound Fallback (Only works if tab stays open)
+      console.error("API scheduling failed, using fallback alert:", err);
       setTimeout(() => {
-        const audio = new Audio('/sounds/notification.mp3');
-        audio.play().catch(() => {});
+        alert(`⏰ Reminder: ${todoText}`);
       }, mins * 60000);
+    } finally {
+      setPendingTodoId(null);
     }
   };
 
@@ -156,8 +145,6 @@ function App() {
         <div className="Create">
           <div className="rounded"></div>
           <input 
-            id="todo-input"
-            name="todo-input"
             className="input" 
             placeholder="Create a new todo..." 
             value={inputValue} 
@@ -174,7 +161,13 @@ function App() {
               ))}
             </AnimatePresence>
           </Reorder.Group>
-          <FilterBar todos={todos} setTodos={setTodos} filter={filter} setFilter={setFilter} />
+          <FilterBar todos={todos} setTodos={setTodos} filter={filter} setFilter={setFilter} isOutside={false} />
+        </div>
+
+        <FilterBar todos={todos} setTodos={setTodos} filter={filter} setFilter={setFilter} isOutside={true} />
+
+        <div className="Instruction">
+          <p>Drag and drop to reorder list</p>
         </div>
       </section>
 
@@ -188,17 +181,13 @@ function App() {
               exit={{ scale: 0.8, opacity: 0 }}
             >
               <p className="modal-title">Remind me in...</p>
-              <motion.div 
-                className="clock-icon" 
-                animate={{ rotate: 360 }} 
-                transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-              >
+              
+              <div className="clock-icon">
                 ⏰
-              </motion.div>
+              </div>
+              
               <div className="custom-time-input">
                 <input 
-                  id="mins-field"
-                  name="mins-field"
                   type="number" 
                   placeholder="0" 
                   value={customMin} 
@@ -206,11 +195,13 @@ function App() {
                 />
                 <span>mins</span>
               </div>
+
               <div className="timer-options">
-                <button onClick={() => scheduleReminder(customMin || 5)}>
+                <button type="button" onClick={() => scheduleReminder(customMin)}>
                   Set Reminder
                 </button>
               </div>
+
               <button className="skip-btn" onClick={() => setShowTimerModal(false)}>
                 Skip
               </button>
