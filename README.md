@@ -56,11 +56,8 @@ Frontend Mentor - @yourusername
 
 ### Before you push to GitHub:
 1. **Check your `.gitignore`:** Make sure it has a line that says `node_modules`. If you don't have a `.gitignore` file, create one and add that line. This prevents your project from being massive and slow to upload.
-2. **Screenshots:** It’s a great idea to add a folder named `screenshots` and include an image of your finished app. You can then reference it in the README with `![App Screenshot](./screenshots/desktop-preview.jpg)`.
+2. **Screenshots:** It’s a great idea to add a folder named `screenshots` and include an image of your finished app. You can then reference it in the README with `![App Screenshot](./screenshots/desktop-preview.jpg)`
 
-
-
-**Since you are heading to Vercel, would you like me to explain how to set up the "Environment Variables" if you ever decide to add a database later, or are you all set with the LocalStorage version?**
 
 
 
