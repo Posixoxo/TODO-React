@@ -16,10 +16,10 @@ function App() {
   const [pendingTodoId, setPendingTodoId] = useState(null);
   const [customMin, setCustomMin] = useState("");
 
-  // Sound Fallback Helper
-  const playNotificationSound = () => {
+  // --- NEW SOUND FUNCTION ---
+  const playAlarm = () => {
     const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-    audio.play().catch(e => console.log("Sound blocked by browser until user interacts."));
+    audio.play().catch(err => console.log("Sound play blocked until user interaction", err));
   };
 
   useEffect(() => {
@@ -35,9 +35,7 @@ function App() {
         await OneSignal.init({ 
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID, 
           allowLocalhostAsSecureOrigin: true,
-          serviceWorkerPath: "OneSignalSDKWorker.js",
-          // Disable the default welcome notification to avoid confusion
-          welcomeNotification: { disable: true } 
+          serviceWorkerPath: "OneSignalSDKWorker.js"
         });
       } catch (e) {
         if (!e.message?.includes("already initialized")) {
@@ -62,7 +60,9 @@ function App() {
     }
   };
 
+  // --- OPTIMIZED SCHEDULE REMINDER ---
   const scheduleReminder = async (minutes) => {
+    // 1. IMMEDIATE UI CLEANUP
     const mins = parseInt(minutes);
     setShowTimerModal(false);
     setCustomMin("");
@@ -72,32 +72,36 @@ function App() {
       return;
     }
 
+    console.log("Scheduling request for:", mins, "mins");
     const todo = todos.find(t => t.id === pendingTodoId);
     const todoText = todo?.text || "Todo Reminder";
 
     try {
-      let subscriptionId = OneSignal.User?.pushSubscription?.id;
+      // 2. CHECK FOR ONESIGNAL (Handle Localhost Failures)
+      let subscriptionId = null;
+      try {
+        subscriptionId = OneSignal.User?.pushSubscription?.id;
+      } catch (e) {
+        console.warn("OneSignal SDK checking failed.");
+      }
 
       if (!subscriptionId) {
-        console.warn("Using Browser Fallback...");
+        console.warn("OneSignal not active (Localhost/Blocked). Fallback alert set.");
         
+        // Browser Alert Fallback + Sound
         setTimeout(() => {
-          playNotificationSound();
-          // Try showing a real browser notification first
-          if (Notification.permission === "granted") {
-            new Notification("Todo Reminder", { body: todoText, icon: "/favicon-32x32.png" });
-          } else {
-            alert(`⏰ Reminder: ${todoText}`);
-          }
+          playAlarm(); // Triggers Sound
+          alert(`⏰ Reminder: ${todoText}`);
         }, mins * 60000);
 
+        // Request permission in background (no 'await' so it doesn't freeze)
         OneSignal.Notifications?.requestPermission().catch(() => {});
+        setPendingTodoId(null);
         return; 
       }
 
-      // PRODUCTION API CALL
-      const sendAfter = new Date(Date.now() + (mins * 60000));
-      
+      // 3. PRODUCTION API CALL (Only on Vercel)
+      const sendAfter = new Date(Date.now() + (mins * 60000) + 15000);
       await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
@@ -108,18 +112,15 @@ function App() {
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
           include_subscription_ids: [subscriptionId], 
           contents: { "en": `⏰ Task: ${todoText}` },
-          headings: { "en": "Todo Reminder" },
-          send_after: sendAfter.toISOString(),
-          // Use a built-in sound for the push notification
-          android_sound: "notification",
-          ios_sound: "notification.wav"
+          headings: { "en": "Todo App" },
+          send_after: sendAfter.toISOString(), 
         })
       });
 
     } catch (err) {
-      console.error("API failed:", err);
+      console.error("API scheduling failed, using fallback alert:", err);
       setTimeout(() => {
-        playNotificationSound();
+        playAlarm(); // Triggers Sound
         alert(`⏰ Reminder: ${todoText}`);
       }, mins * 60000);
     } finally {
@@ -188,7 +189,11 @@ function App() {
               exit={{ scale: 0.8, opacity: 0 }}
             >
               <p className="modal-title">Remind me in...</p>
-              <div className="clock-icon">⏰</div>
+              
+              <div className="clock-icon">
+                ⏰
+              </div>
+              
               <div className="custom-time-input">
                 <input 
                   type="number" 
@@ -198,11 +203,13 @@ function App() {
                 />
                 <span>mins</span>
               </div>
+
               <div className="timer-options">
                 <button type="button" onClick={() => scheduleReminder(customMin)}>
                   Set Reminder
                 </button>
               </div>
+
               <button className="skip-btn" onClick={() => setShowTimerModal(false)}>
                 Skip
               </button>
